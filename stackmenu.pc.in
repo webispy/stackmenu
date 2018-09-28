@@ -1,0 +1,9 @@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@/stackmenu
+version=@LIB_VERSION_MAJOR@.@LIB_VERSION_MINOR@.@LIB_VERSION_PATCH@
+
+Name: Stackmenu
+Description: An easy text-based menu library that supports multiple sub-menus.
+Version: ${version}
+Libs: -L${libdir} -lstackmenu
+Cflags: -I${includedir}

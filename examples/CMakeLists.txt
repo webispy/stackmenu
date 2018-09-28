@@ -1,0 +1,20 @@
+SET(EXAMPLES
+	simple)
+
+FOREACH(example ${EXAMPLES})
+	ADD_EXECUTABLE(${example} ${example}.c)
+	TARGET_INCLUDE_DIRECTORIES(${example} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+	TARGET_LINK_LIBRARIES(${example} stackmenu)
+	ADD_DEPENDENCIES(${example} stackmenu)
+
+	IF(${GLIB2_FOUND})
+		ADD_EXECUTABLE(${example}-glib ${example}-glib.c)
+		FOREACH(flag ${GLIB2_CFLAGS})
+			TARGET_COMPILE_OPTIONS(${example}-glib PRIVATE "${flag}")
+		ENDFOREACH(flag)
+		TARGET_COMPILE_DEFINITIONS(${example}-glib PRIVATE "-DBACKEND_GLIB")
+		TARGET_INCLUDE_DIRECTORIES(${example}-glib PRIVATE ${CMAKE_SOURCE_DIR}/src)
+		TARGET_LINK_LIBRARIES(${example}-glib stackmenu-glib)
+		ADD_DEPENDENCIES(${example} stackmenu-glib)
+	ENDIF(${GLIB2_FOUND})
+ENDFOREACH(example)
