@@ -1,0 +1,31 @@
+Source: stackmenu
+Section: libs
+Priority: optional
+Maintainer: Inho Oh <webispy@gmail.com>
+Build-Depends: debhelper (>=9),
+	cmake,
+	pkg-config,
+	libglib2.0-dev
+Standards-Version: 3.9.6
+
+Package: libstackmenu
+Architecture: any
+Depends: ${shilbs:Depends}, ${misc:Depends}
+Description: An easy text-based menu library that supports multiple sub-menus.
+
+Package: libstackmenu-dev
+Architecture: any
+Depends: libstackmenu
+Description: An easy text-based menu library that supports multiple sub-menus. (development files)
+
+Package: libstackmenu-test
+Architecture: any
+Depends: libstackmenu
+Description: An easy text-based menu library that supports multiple sub-menus. (test programs)
+
+Package: libstackmenu-dbg
+Section: debug
+Architecture: any
+Depends: ${shilbs:Depends}, ${misc:Depends}
+Description: An easy text-based menu library that supports multiple sub-menus. (debugging symbols)
+
