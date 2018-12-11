@@ -45,6 +45,7 @@ StackmenuItem *stackmenu_item_find_by_title(StackmenuItem *items,
 
 int stackmenu_item_disable(StackmenuItem *item);
 int stackmenu_item_enable(StackmenuItem *item);
+int stackmenu_item_is_enabled(const StackmenuItem *item);
 
 #ifdef __cplusplus
 }

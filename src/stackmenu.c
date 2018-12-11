@@ -887,3 +887,16 @@ int stackmenu_item_enable(StackmenuItem *item)
 	return 0;
 }
 
+int stackmenu_item_is_enabled(const StackmenuItem *item)
+{
+	if (!item)
+		return -1;
+	if (!item->key)
+		return -1;
+
+	if (item->key[0] == MARK_DISABLE)
+		return 0;
+
+	return 1;
+}
+
