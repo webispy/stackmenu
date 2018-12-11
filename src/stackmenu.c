@@ -12,6 +12,29 @@
 #include <ctype.h>
 #include <errno.h>
 
+#define ANSI_COLOR_NORMAL       "\e[0m"
+
+#define ANSI_COLOR_BLACK        "\e[0;30m"
+#define ANSI_COLOR_RED          "\e[0;31m"
+#define ANSI_COLOR_GREEN        "\e[0;32m"
+#define ANSI_COLOR_BROWN        "\e[0;33m"
+#define ANSI_COLOR_BLUE         "\e[0;34m"
+#define ANSI_COLOR_MAGENTA      "\e[0;35m"
+#define ANSI_COLOR_CYAN         "\e[0;36m"
+#define ANSI_COLOR_LIGHTGRAY    "\e[0;37m"
+
+#define ANSI_COLOR_DARKGRAY     "\e[1;30m"
+#define ANSI_COLOR_LIGHTRED     "\e[1;31m"
+#define ANSI_COLOR_LIGHTGREEN   "\e[1;32m"
+#define ANSI_COLOR_YELLOW       "\e[1;33m"
+#define ANSI_COLOR_LIGHTBLUE    "\e[1;34m"
+#define ANSI_COLOR_LIGHTMAGENTA "\e[1;35m"
+#define ANSI_COLOR_LIGHTCYAN    "\e[1;36m"
+#define ANSI_COLOR_WHITE        "\e[1;37m"
+
+#define CON  ANSI_COLOR_DARKGRAY
+#define COFF ANSI_COLOR_NORMAL
+
 #if 0
 /*
  * Horizontal Line - width: 44
@@ -105,13 +128,16 @@
 	fflush(stdout); \
 }
 
+#define MARK_DISABLE            '^'
+#define MARK_BLANK_KEY          '_'
+#define MARK_SEPARATOR          '-'
+#define MARK_ALWAYS_INVOKE      '*'
+
 #define DEFAULT_MENU_MENU       "m"
 #define DEFAULT_MENU_PREV       "p"
 #define DEFAULT_MENU_QUIT       "q"
 #define DEFAULT_MENU_NONE       "-"
 
-#define CON ANSI_COLOR_DARKGRAY
-#define COFF ANSI_COLOR_NORMAL
 #define RESERVED_MENU_STRING \
 	CON HR_SINGLE2 COFF "\n" \
 	CON " [ " COFF DEFAULT_MENU_PREV CON " ] " COFF "Previous menu\n" \
@@ -240,8 +266,8 @@ struct _stack_menu {
 	GStack *stack;
 	GStack *title_stack;
 
-	struct _stackmenu_item *menu;
-	struct _stackmenu_item *saved_item;
+	StackmenuItem *items;
+	StackmenuItem *saved_item;
 
 	char *buf;
 	char key_buffer[MENU_DATA_SIZE];
@@ -265,35 +291,35 @@ static void _show_prompt(void)
 			tp.tv_nsec / 1000000L)
 }
 
-static void _invoke_item_sync(Stackmenu *mm, struct _stackmenu_item *item)
+static void _invoke_item_sync(Stackmenu *sm, StackmenuItem *item)
 {
 	int ret;
 
 	if (!item->callback)
 		return;
 
-	ret = item->callback(mm, item, mm->user_data);
+	ret = item->callback(sm, item, sm->user_data);
 	if (ret < 0) {
 		mmsg(ANSI_COLOR_RED "'%s' failed. (ret=%d)" COFF,
 				item->title, ret)
 	}
 }
 
-static void _show_menu(Stackmenu *mm, struct _stackmenu_item menu[])
+static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 {
-	struct _stackmenu_item *item;
+	StackmenuItem *si;
 	char title_buf[256] = {0, };
 	GList *cur;
 	int key_flag;
 	int disabled;
 
-	if (!menu)
+	if (!items)
 		return;
 
 	mmsg("\n" HR_DOUBLE)
 	msgn(ANSI_COLOR_YELLOW " Main")
 
-	cur = mm->title_stack->head;
+	cur = sm->title_stack->head;
 	while (cur) {
 		msgn(COFF " >> " ANSI_COLOR_YELLOW "%s", (char *)cur->data)
 
@@ -302,60 +328,58 @@ static void _show_menu(Stackmenu *mm, struct _stackmenu_item menu[])
 
 	mmsg(COFF "\n" HR_SINGLE)
 
-	item = menu;
-	while (item->key) {
+	si = items;
+	while (si->key) {
 		key_flag = 1;
 		disabled = 0;
-		if (strlen(item->key) == 1) {
+		if (strlen(si->key) == 1) {
 			key_flag = 0;
 
-			switch (item->key[0]) {
-			case '_':
-				/* no key */
+			switch (si->key[0]) {
+			case MARK_BLANK_KEY:
 				msgn("       ")
 				break;
 
-			case '-':
-				/* separator */
+			case MARK_SEPARATOR:
 				mmsg(CON HR_SINGLE2 COFF)
-				_invoke_item_sync(mm, item);
+				_invoke_item_sync(sm, si);
 
-				item++;
+				si++;
 
 				continue;
 				break;
 
-			case '*':
+			case MARK_ALWAYS_INVOKE:
 				/* invoke the callback on menu display time */
-				_invoke_item_sync(mm, item);
+				_invoke_item_sync(sm, si);
 				break;
 
 			default:
 				msgn(CON " [" COFF " %c " CON "] " COFF,
-						item->key[0])
+						si->key[0])
 				break;
 			}
 		}
 
 		if (key_flag == 1) {
-			if (item->key[0] == '^') {
+			if (si->key[0] == MARK_DISABLE) {
 				disabled = 1;
-				if (strlen(item->key + 1) == 1) {
-					msgn(CON " [ %c ] " COFF, item->key[1])
+				if (strlen(si->key + 1) == 1) {
+					msgn(CON " [ %c ] " COFF, si->key[1])
 				} else {
-					msgn(CON " [%3s] " COFF, item->key + 1)
+					msgn(CON " [%3s] " COFF, si->key + 1)
 				}
 			} else {
 				msgn(CON " [" COFF "%3s" CON "] " COFF,
-						item->key)
+						si->key)
 			}
 		}
 
-		if (item->title) {
+		if (si->title) {
 			memset(title_buf, 0, 256);
-			snprintf(title_buf, MAX_TITLE, "%s", item->title);
+			snprintf(title_buf, MAX_TITLE, "%s", si->title);
 
-			if (strlen(item->title) >= MAX_TITLE) {
+			if (strlen(si->title) >= MAX_TITLE) {
 				title_buf[MAX_TITLE - 2] = '.';
 				title_buf[MAX_TITLE - 1] = '.';
 			}
@@ -367,23 +391,23 @@ static void _show_menu(Stackmenu *mm, struct _stackmenu_item menu[])
 			}
 		}
 
-		if (item->data) {
+		if (si->data) {
 			if (disabled) {
-				msgn(CON "(%s)" COFF, item->data)
+				msgn(CON "(%s)" COFF, si->data)
 			} else {
 				msgn(ANSI_COLOR_LIGHTBLUE "(%s)" COFF,
-						item->data)
+						si->data)
 			}
 		}
 
-		if (item->sub_menu)
+		if (si->sub_menu)
 			msgn("\r\e[%dC >", (int)POS_MORE)
 
 		_putc('\n');
-		item++;
+		si++;
 	}
 
-	if (item == menu)
+	if (si == items)
 		mmsg(" No items");
 
 	mmsg(RESERVED_MENU_STRING)
@@ -392,7 +416,7 @@ static void _show_menu(Stackmenu *mm, struct _stackmenu_item menu[])
 	_show_prompt();
 }
 
-static void _show_item_data_input_msg(struct _stackmenu_item *item)
+static void _show_item_data_input_msg(const StackmenuItem *item)
 {
 	mmsg("")
 	mmsg(HR_DOUBLE)
@@ -402,33 +426,32 @@ static void _show_item_data_input_msg(struct _stackmenu_item *item)
 	msgn(" new >> ")
 }
 
-static void _move_menu(Stackmenu *mm, struct _stackmenu_item menu[],
-		const char *key)
+static void _move_menu(Stackmenu *sm, StackmenuItem items[], const char *key)
 {
-	struct _stackmenu_item *item;
+	StackmenuItem *si;
 	int i = 0;
 
-	if (!mm->menu)
+	if (!sm->items)
 		return;
 
 	if (!g_strcmp0(DEFAULT_MENU_PREV, key)) {
-		if (g_stack_get_length(mm->stack) > 0) {
-			mm->menu = g_stack_pop(mm->stack);
-			g_stack_pop(mm->title_stack);
+		if (g_stack_get_length(sm->stack) > 0) {
+			sm->items = g_stack_pop(sm->stack);
+			g_stack_pop(sm->title_stack);
 		}
 
-		_show_menu(mm, mm->menu);
-		mm->buf = mm->key_buffer;
+		_show_menu(sm, sm->items);
+		sm->buf = sm->key_buffer;
 
 		return;
 	} else if (!g_strcmp0(DEFAULT_MENU_MENU, key)) {
-		_show_menu(mm, mm->menu);
+		_show_menu(sm, sm->items);
 		return;
 	} else if (!g_strcmp0(DEFAULT_MENU_QUIT, key)) {
 #ifdef BACKEND_GLIB
-		g_main_loop_quit(mm->mainloop);
+		g_main_loop_quit(sm->mainloop);
 #else
-		mm->exit = 1;
+		sm->exit = 1;
 #endif
 		return;
 	} else if (!g_strcmp0(DEFAULT_MENU_NONE, key)) {
@@ -437,41 +460,41 @@ static void _move_menu(Stackmenu *mm, struct _stackmenu_item menu[],
 	}
 
 	while (1) {
-		item = menu + i;
-		if (item->key == NULL)
+		si = items + i;
+		if (si->key == NULL)
 			break;
 
-		if (item->key[0] == '^') {
-			if (!g_strcmp0(item->key + 1, key)) {
+		if (si->key[0] == MARK_DISABLE) {
+			if (!g_strcmp0(si->key + 1, key)) {
 				mmsg("Disabled menu")
 				break;
 			}
 		}
 
-		if (!g_strcmp0(item->key, key)) {
-			mm->saved_item = NULL;
+		if (!g_strcmp0(si->key, key)) {
+			sm->saved_item = NULL;
 
-			if (item->sub_menu) {
-				g_stack_push(mm->stack, mm->menu);
-				g_stack_push(mm->title_stack,
-						(void *)item->title);
+			if (si->sub_menu) {
+				g_stack_push(sm->stack, sm->items);
+				g_stack_push(sm->title_stack,
+						(void *)si->title);
 
-				mm->menu = item->sub_menu;
-				_show_menu(mm, mm->menu);
-				mm->buf = mm->key_buffer;
+				sm->items = si->sub_menu;
+				_show_menu(sm, sm->items);
+				sm->buf = sm->key_buffer;
 			}
 
-			if (item->callback && item->data == NULL) {
-				_invoke_item_sync(mm, item);
+			if (si->callback && si->data == NULL) {
+				_invoke_item_sync(sm, si);
 				_show_prompt();
 			}
 
-			if (item->data) {
-				_show_item_data_input_msg(item);
-				mm->buf = item->data;
+			if (si->data) {
+				_show_item_data_input_msg(si);
+				sm->buf = si->data;
 
-				if (item->callback)
-					mm->saved_item = item;
+				if (si->callback)
+					sm->saved_item = si;
 			}
 
 			return;
@@ -492,7 +515,7 @@ static void _show_input_ok(void)
 static int on_stack_menu_keyboard(GIOChannel *src, GIOCondition con,
 		gpointer data)
 {
-	Stackmenu *mm = data;
+	Stackmenu *sm = data;
 	char local_buf[MENU_DATA_SIZE + 1] = {0, };
 
 	if (fgets(local_buf, MENU_DATA_SIZE, stdin) == NULL)
@@ -503,27 +526,27 @@ static int on_stack_menu_keyboard(GIOChannel *src, GIOCondition con,
 			local_buf[strlen(local_buf) - 1] = '\0';
 	}
 
-	if (mm->buf == mm->key_buffer) {
+	if (sm->buf == sm->key_buffer) {
 		if (strlen(local_buf) < 1) {
 			_show_prompt();
 			return 1;
 		}
 
-		_move_menu(mm, mm->menu, local_buf);
+		_move_menu(sm, sm->items, local_buf);
 	} else {
-		if (mm->buf) {
-			memset(mm->buf, 0, MENU_DATA_SIZE);
-			memcpy(mm->buf, local_buf, MENU_DATA_SIZE);
+		if (sm->buf) {
+			memset(sm->buf, 0, MENU_DATA_SIZE);
+			memcpy(sm->buf, local_buf, MENU_DATA_SIZE);
 			_show_input_ok();
 
-			if (mm->saved_item) {
-				_invoke_item_sync(mm, mm->saved_item);
-				mm->saved_item = NULL;
+			if (sm->saved_item) {
+				_invoke_item_sync(sm, sm->saved_item);
+				sm->saved_item = NULL;
 			}
 		}
 
-		mm->buf = mm->key_buffer;
-		_move_menu(mm, mm->menu, DEFAULT_MENU_MENU);
+		sm->buf = sm->key_buffer;
+		_move_menu(sm, sm->items, DEFAULT_MENU_MENU);
 	}
 
 	return 1;
@@ -531,31 +554,31 @@ static int on_stack_menu_keyboard(GIOChannel *src, GIOCondition con,
 
 #else
 
-static int on_readline(Stackmenu *mm, const char *buf, int size)
+static int on_readline(Stackmenu *sm, const char *buf, int size)
 {
-	if (mm->buf == mm->key_buffer) {
+	if (sm->buf == sm->key_buffer) {
 		if (size < 1) {
 			_show_prompt();
 			return 1;
 		}
 
-		_move_menu(mm, mm->menu, buf);
+		_move_menu(sm, sm->items, buf);
 		return 1;
 	}
 
-	if (mm->buf) {
-		memset(mm->buf, 0, MENU_DATA_SIZE);
-		memcpy(mm->buf, buf, MENU_DATA_SIZE);
+	if (sm->buf) {
+		memset(sm->buf, 0, MENU_DATA_SIZE);
+		memcpy(sm->buf, buf, MENU_DATA_SIZE);
 		mmsg(" > Saved.")
 
-		if (mm->saved_item) {
-			_invoke_item_sync(mm, mm->saved_item);
-			mm->saved_item = NULL;
+		if (sm->saved_item) {
+			_invoke_item_sync(sm, sm->saved_item);
+			sm->saved_item = NULL;
 		}
 	}
 
-	mm->buf = mm->key_buffer;
-	_move_menu(mm, mm->menu, DEFAULT_MENU_MENU);
+	sm->buf = sm->key_buffer;
+	_move_menu(sm, sm->items, DEFAULT_MENU_MENU);
 
 	return 1;
 }
@@ -644,37 +667,30 @@ static int _automata(struct _terminal *term, char ch)
 #endif
 
 #ifdef BACKEND_GLIB
-Stackmenu *stackmenu_new(struct _stackmenu_item items[], GMainLoop *mainloop)
+Stackmenu *stackmenu_new(StackmenuItem items[], GMainLoop *mainloop)
 #else
-Stackmenu *stackmenu_new(struct _stackmenu_item items[])
+Stackmenu *stackmenu_new(StackmenuItem items[])
 #endif
 {
-	Stackmenu *mm;
-#ifdef BACKEND_GLIB
-	GIOChannel *channel = g_io_channel_unix_new(STDIN_FILENO);
-#endif
+	Stackmenu *sm;
 
-	mm = calloc(sizeof(struct _stack_menu), 1);
-	if (!mm)
+	sm = calloc(sizeof(struct _stack_menu), 1);
+	if (!sm)
 		return NULL;
 
-	mm->stack = g_stack_new();
-	mm->title_stack = g_stack_new();
-	mm->menu = items;
-	mm->exit = 0;
+	sm->stack = g_stack_new();
+	sm->title_stack = g_stack_new();
+	sm->items = items;
+	sm->exit = 0;
 
 #ifdef BACKEND_GLIB
-	mm->mainloop = mainloop;
-
-	/* key input */
-	g_io_add_watch(channel, (G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL),
-			on_stack_menu_keyboard, mm);
+	sm->mainloop = mainloop;
 #endif
 
-	return mm;
+	return sm;
 }
 
-int stackmenu_run(Stackmenu *mm)
+int stackmenu_run(Stackmenu *sm)
 {
 #ifndef BACKEND_GLIB
 	int nfds;
@@ -684,16 +700,23 @@ int stackmenu_run(Stackmenu *mm)
 	struct _terminal term;
 
 	memset(&term, 0, sizeof(struct _terminal));
+#else
+	GIOChannel *channel = g_io_channel_unix_new(STDIN_FILENO);
+
+	/* key input */
+	g_io_add_watch(channel, (G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL),
+			on_stack_menu_keyboard, sm);
+	g_io_channel_unref(channel);
 #endif
 
-	_show_menu(mm, mm->menu);
+	_show_menu(sm, sm->items);
 
-	mm->buf = mm->key_buffer;
+	sm->buf = sm->key_buffer;
 
 #ifndef BACKEND_GLIB
 	pollfds[0].fd = 0;
 
-	while (!mm->exit) {
+	while (!sm->exit) {
 		pollfds[0].events |= POLLIN;
 		nfds = poll(pollfds, 1, -1);
 		if (nfds == -1)
@@ -705,7 +728,7 @@ int stackmenu_run(Stackmenu *mm)
 				break;
 
 			if (_automata(&term, buf) == 1) {
-				on_readline(mm, term.buf, term.length);
+				on_readline(sm, term.buf, term.length);
 				memset(&term, 0, sizeof(struct _terminal));
 			}
 		}
@@ -715,151 +738,152 @@ int stackmenu_run(Stackmenu *mm)
 	return 0;
 }
 
-int stackmenu_set_user_data(Stackmenu *mm, void *user_data)
+int stackmenu_set_user_data(Stackmenu *sm, void *user_data)
 {
-	if (!mm)
+	if (!sm)
 		return -1;
 
-	mm->user_data = user_data;
+	sm->user_data = user_data;
 
 	return 0;
 }
 
-void *stackmenu_get_user_data(Stackmenu *mm)
+void *stackmenu_get_user_data(const Stackmenu *sm)
 {
-	if (!mm)
+	if (!sm)
 		return NULL;
 
-	return mm->user_data;
+	return sm->user_data;
 }
 
-void stackmenu_item_clear(struct _stackmenu_item *md)
+void stackmenu_item_clear(StackmenuItem *item)
+{
+	if (!item)
+		return;
+
+	if (item->key)
+		free(item->key);
+
+	if (item->title)
+		free(item->title);
+
+	if (item->data)
+		free(item->data);
+
+	if (item->custom_data_destroy_callback)
+		item->custom_data_destroy_callback(item->custom_data);
+
+	if (item->sub_menu) {
+		int i = 0;
+
+		for (; item->sub_menu[i].key; i++)
+			stackmenu_item_clear(&(item->sub_menu[i]));
+
+		free(item->sub_menu);
+	}
+
+	memset(item, 0, sizeof(StackmenuItem));
+}
+
+int stackmenu_item_count(const StackmenuItem *items)
 {
 	int i = 0;
 
-	if (!md)
-		return;
+	if (!items)
+		return -1;
 
-	if (md->key)
-		free(md->key);
-
-	if (md->title)
-		free(md->title);
-
-	if (md->data)
-		free(md->data);
-
-	if (md->custom_data_destroy_callback)
-		md->custom_data_destroy_callback(md->custom_data);
-
-	if (md->sub_menu) {
-		while (i) {
-			if (md->sub_menu[i].key == NULL)
-				break;
-
-			stackmenu_item_clear(&(md->sub_menu[i]));
-
-			i++;
-		}
-
-		free(md->sub_menu);
-	}
-
-	memset(md, 0, sizeof(struct _stackmenu_item));
-}
-
-int stackmenu_item_count(struct _stackmenu_item *md)
-{
-	int i;
-
-	for (i = 0; i < MENU_MAX_ITEMS; i++) {
-		if (md[i].key == NULL)
+	for (; i < MENU_MAX_ITEMS; i++) {
+		if (!items[i].key)
 			break;
 	}
 
 	return i;
 }
 
-struct _stackmenu_item *stackmenu_item_find(struct _stackmenu_item *md, const char *key)
+StackmenuItem *stackmenu_item_find(StackmenuItem *items, const char *key)
 {
 	int i;
 
-	if (!key || !md)
+	if (!key || !items)
 		return NULL;
 
 	for (i = 0; i < MENU_MAX_ITEMS; i++) {
-		if (!md[i].key)
+		if (!items[i].key)
 			break;
 
-		if (md[i].key[0] == '^') {
-			if (strcmp(md[i].key + 1, key) == 0)
-				return md + i;
+		if (items[i].key[0] == MARK_DISABLE) {
+			if (strcmp(items[i].key + 1, key) == 0)
+				return items + i;
 		} else {
-			if (strcmp(md[i].key, key) == 0)
-				return md + i;
+			if (strcmp(items[i].key, key) == 0)
+				return items + i;
 		}
 	}
 
 	return NULL;
 }
 
-struct _stackmenu_item *stackmenu_item_find_by_title(struct _stackmenu_item *md,
+StackmenuItem *stackmenu_item_find_by_title(StackmenuItem *items,
 		const char *title)
 {
 	int i;
 
-	if (!title || !md)
+	if (!title || !items)
 		return NULL;
 
 	for (i = 0; i < MENU_MAX_ITEMS; i++) {
-		if (!md[i].title)
+		if (!items[i].key)
+			break;
+
+		if (!items[i].title)
 			continue;
 
-		if (strcmp(md[i].title, title) == 0)
-			return md + i;
+		if (strcmp(items[i].title, title) == 0)
+			return items + i;
 	}
 
 	return NULL;
 }
 
-int stackmenu_item_disable(struct _stackmenu_item *md)
+int stackmenu_item_disable(StackmenuItem *item)
 {
 	int i, len;
 
-	if (!md)
+	if (!item)
 		return -1;
-	if (!md->key)
+	if (!item->key)
 		return -1;
-	if (md->key[0] == '^')
+	if (item->key[0] == MARK_DISABLE)
 		return 0;
 
-	len = strlen(md->key);
-	md->key[len + 1] = '\0';
+	len = strlen(item->key);
+	item->key[len + 1] = '\0';
 
 	for (i = len; i > 0; i--) {
-		md->key[i] = md->key[i - 1];
+		item->key[i] = item->key[i - 1];
 	}
-	md->key[0] = '^';
+	item->key[0] = MARK_DISABLE;
 
 	return 0;
 }
 
-int stackmenu_item_enable(struct _stackmenu_item *md)
+int stackmenu_item_enable(StackmenuItem *item)
 {
 	int i, len;
 
-	if (!md)
+	if (!item)
 		return -1;
-	if (!md->key)
+	if (!item->key)
 		return -1;
-	if (md->key[0] != '^')
+	if (item->key[0] != MARK_DISABLE)
 		return 0;
 
-	len = strlen(md->key);
+	len = strlen(item->key);
 
 	for (i = 0; i < len; i++)
-		md->key[i] = md->key[i + 1];
-	md->key[len - 1] = '\0';
+		item->key[i] = item->key[i + 1];
+	item->key[len - 1] = '\0';
 
 	return 0;
 }
+
