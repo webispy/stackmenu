@@ -7,6 +7,7 @@
 
 #define MENU_DATA_SIZE 2048
 #define MENU_MAX_ITEMS 99
+#define MENU_DEFAULT_LEFT_PADDING "       "
 
 #ifdef __cplusplus
 extern "C"

@@ -317,6 +317,7 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 	GList *cur;
 	int key_flag;
 	int disabled;
+	int output;
 
 	if (!items)
 		return;
@@ -337,16 +338,20 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 	while (si->key) {
 		key_flag = 1;
 		disabled = 0;
+		output = 0;
+
 		if (strlen(si->key) == 1) {
 			key_flag = 0;
 
 			switch (si->key[0]) {
 			case MARK_BLANK_KEY:
-				msgn("       ")
+				msgn(MENU_DEFAULT_LEFT_PADDING)
+				output = 1;
 				break;
 
 			case MARK_SEPARATOR:
 				mmsg(CON HR_SINGLE2 COFF)
+				output = 1;
 				_invoke_item_sync(sm, si);
 
 				si++;
@@ -355,18 +360,18 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 				break;
 
 			case MARK_ALWAYS_INVOKE:
-				/* invoke the callback on menu display time */
-				_invoke_item_sync(sm, si);
 				break;
 
 			default:
 				msgn(CON " [" COFF " %c " CON "] " COFF,
 						si->key[0])
+				output = 1;
 				break;
 			}
 		}
 
 		if (key_flag == 1) {
+			output = 1;
 			if (si->key[0] == MARK_DISABLE) {
 				disabled = 1;
 				if (strlen(si->key + 1) == 1) {
@@ -381,6 +386,7 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 		}
 
 		if (si->title) {
+			output = 1;
 			memset(title_buf, 0, 256);
 			snprintf(title_buf, MAX_TITLE, "%s", si->title);
 
@@ -397,6 +403,7 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 		}
 
 		if (si->data) {
+			output = 1;
 			if (disabled) {
 				msgn(CON "(%s)" COFF, si->data)
 			} else {
@@ -405,10 +412,26 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 			}
 		}
 
-		if (si->sub_menu)
+		if (si->sub_menu) {
+			output = 1;
 			msgn("\r\e[%dC >", (int)POS_MORE)
+		}
 
-		_putc('\n');
+		if (output)
+			_putc('\n');
+
+		if (key_flag == 0) {
+			switch (si->key[0]) {
+			case MARK_BLANK_KEY:
+			case MARK_ALWAYS_INVOKE:
+				/* invoke the callback on menu display time */
+				_invoke_item_sync(sm, si);
+				break;
+			default:
+				break;
+			}
+		}
+
 		si++;
 	}
 
