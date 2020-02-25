@@ -138,6 +138,11 @@
 #define DEFAULT_MENU_QUIT       "q"
 #define DEFAULT_MENU_NONE       "-"
 
+#define RESERVED_MENU_STRING_TOPMENU \
+	CON HR_SINGLE2 COFF "\n" \
+	CON " [ " COFF DEFAULT_MENU_MENU CON " ] " COFF "Show Menu\n" \
+	CON " [ " COFF DEFAULT_MENU_QUIT CON " ] " COFF "Quit"
+
 #define RESERVED_MENU_STRING \
 	CON HR_SINGLE2 COFF "\n" \
 	CON " [ " COFF DEFAULT_MENU_PREV CON " ] " COFF "Previous menu\n" \
@@ -410,7 +415,11 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 	if (si == items)
 		mmsg(" No items");
 
-	mmsg(RESERVED_MENU_STRING)
+	if (g_stack_get_length(sm->stack) > 0) {
+		mmsg(RESERVED_MENU_STRING)
+	} else {
+		mmsg(RESERVED_MENU_STRING_TOPMENU)
+	}
 	mmsg(HR_DOUBLE)
 
 	_show_prompt();
@@ -435,10 +444,13 @@ static void _move_menu(Stackmenu *sm, StackmenuItem items[], const char *key)
 		return;
 
 	if (!g_strcmp0(DEFAULT_MENU_PREV, key)) {
-		if (g_stack_get_length(sm->stack) > 0) {
-			sm->items = g_stack_pop(sm->stack);
-			g_stack_pop(sm->title_stack);
+		if (g_stack_get_length(sm->stack) == 0) {
+			_show_prompt();
+			return;
 		}
+
+		sm->items = g_stack_pop(sm->stack);
+		g_stack_pop(sm->title_stack);
 
 		_show_menu(sm, sm->items);
 		sm->buf = sm->key_buffer;
