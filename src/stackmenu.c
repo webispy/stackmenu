@@ -351,7 +351,6 @@ static void _show_menu(Stackmenu *sm, StackmenuItem items[])
 
 			case MARK_SEPARATOR:
 				mmsg(CON HR_SINGLE2 COFF)
-				output = 1;
 				_invoke_item_sync(sm, si);
 
 				si++;
